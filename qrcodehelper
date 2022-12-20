@@ -1,0 +1,281 @@
+#!/bin/bash
+# ---------------------------------------------------------------------------
+# qrcodehelper - Generate QR codes for given information.
+
+# Copyright 2022, Peter Martin,,, <peter@mint-upstairs>
+  
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License at <http://www.gnu.org/licenses/> for
+# more details.
+
+# Usage: qrcodehelper [-h|--help]
+
+# Revision history:
+# 2022-12-18 ver. 0.2 
+#                    Removed unnessesary case statement
+#                    and included provision for the generation
+#                    of qr codes for bitcoin.
+# 2022-12-03 Created by new_script ver. 3.4
+# ---------------------------------------------------------------------------
+
+PROGNAME=${0##*/}
+VERSION="0.2"
+DEF_OPTIONS="-s 9 -l H -o"
+TEMP_FILE=$(mktemp)
+QR_ENCODE=$(which qrencode)
+
+if [[ $? -eq 1 ]]
+  then
+      echo
+      echo "Please install the application qrencode exiting..."
+      exit 1
+fi
+
+clean_up() { # Perform pre-exit housekeeping
+    rm "${TEMP_FILE}"
+    return
+}
+
+error_exit() {
+  echo -e "${PROGNAME}: ${1:-"Unknown Error"}" >&2
+  clean_up
+  exit 1
+}
+
+graceful_exit() {
+  clean_up
+  exit
+}
+
+signal_exit() { # Handle trapped signals
+  case $1 in
+    INT)
+      error_exit "Program interrupted by user" ;;
+    TERM)
+      echo -e "\n$PROGNAME: Program terminated" >&2
+      graceful_exit ;;
+    *)
+      error_exit "$PROGNAME: Terminating on unknown signal" ;;
+  esac
+}
+
+usage() {
+  echo -e "Usage: $PROGNAME [-h|--help]"
+}
+
+# Function to help format the correct space between text in columns.
+# $1 is the arbitrary text length to be subtracted.
+# $2 is total length of the string to the next column.
+spaces () {
+        for (( a=0; a<(( $2 - $1 )); a++ )); do echo -n " "; done
+}
+
+help_message() {
+  cat <<- _EOF_
+  $PROGNAME ver. $VERSION
+  Generate QR codes for given information.
+
+  $(usage)
+
+  Options:
+  -h, --help     Display this help message and exit.
+  -O, --options  When prompted enter custom qrencode options.
+                 Note: Where an output file is required these
+                 options must include the -o switch with an
+                 output filename that contains no spaces.
+                 See man qrencode for more information about
+                 available options.
+
+  -b, --bitcoin  With a custom message this will generate
+                 a qr code to request an ammount to be payed
+                 to a bitcoin address.
+  -e, --email    Generates a qr code for a custom message
+                 to be sent via email.
+  -p, --phone    Generates a qr code for a phone number.
+  -s, --sms      Generates a custom sms message to a mobile
+                 phone number.
+  -u, --url      Generates a qr code for a website url.
+  -v, --vcard    Generates a user contact card ie. vcard
+  -w, --wifi     Generates a qr code to connect to a wifi
+                 access point.
+  Note:
+                 This script uses the console application
+                 qrencode to generate QR Codes when prompted
+                 for information for the given options.
+
+_EOF_
+  return
+}
+
+first_name() {
+    read -p "Enter your firstname: " FIRST_NAME
+}
+
+last_name() {
+    read -p "Enter your lastname: " LAST_NAME
+}
+
+title() {
+    read -p "Enter your title ie. Mr or Mrs: " TITLE
+}
+
+phone_number() {
+    read -p "Enter your phone number: " PHONE_NO
+}
+
+display_name() {
+    read -p "Enter a display name: " DISPLAY_NAME
+}
+
+email_address() {
+    read -p "Enter your email address: " EMAIL_ADDR
+}
+
+job_title () {
+    read -p "Enter your job title: " JOB_TITLE
+}
+
+organization () {
+    read -p "Enter your company name: " ORGANIZATION
+}
+
+user_message () {
+    read -p "User predefined message: " USER_MESSAGE
+    
+}
+
+read_bitcoin () {
+    read -p "Enter your bitcoin address: " BTC_ADDRESS
+    while ! [[ ${BTC_AMMOUNT} =~ ^[0-9]+.[0-9]+$ ]]; do
+        read -p "Enter the ammount requested: " BTC_AMMOUNT
+    done 
+    read -p "Enter a custom message: " BTC_MESSAGE
+    BTC_MESSAGE="$(echo ${BTC_MESSAGE} | sed 's/ /%20/g' | sed "s/'/%27/g")"
+}
+
+write_vcard() {
+    FILE_NAME="QR-Code Vcard.png"
+    first_name
+    last_name
+    title
+    display_name
+    email_address
+    phone_number
+    job_title
+    organization
+    cat <<- _EOF_
+BEGIN:VCARD
+VERSION:3.0
+N:${LAST_NAME};${FIRST_NAME};;${TITLE}.;
+FN:${DISPLAY_NAME}
+ORG:${ORGANIZATION}
+TITLE:${JOB_TITLE}
+TEL;TYPE=voice:${PHONE_NO}
+EMAIL:${EMAIL_ADDR}
+END:VCRD
+_EOF_
+  return
+}
+
+write_url () {
+    FILE_NAME="QR-Code Website Url.png"
+    read -p "Enter a valid website url: " WEBSITE_URL
+    echo "${WEBSITE_URL}"
+}
+
+write_sms () {
+    FILE_NAME="QR-Code SMS Message.png"
+    phone_number
+    user_message
+    echo "SMSTO:${PHONE_NO}:${USER_MESSAGE}"
+}
+
+write_ph () {
+    phone_number
+    FILE_NAME="QR-Code Phone Number(${PHONE_NO}).png" 
+    echo "tel:${PHONE_NO}"
+}
+
+write_wifi () {
+    read -p "Enter WiFi SSID: " SSID
+    read -p "Enter Wifi password: " PASSWORD
+    read -p "Is the Network hidden (y) Yes, or def (n) No: " -n 1 -r
+    if [[ ! $REPLY =~ ^[Yy]$ ]]
+    then
+        echo "WIFI:S:${SSID};T:WPA2;P:${PASSWORD};H:false;;"
+    else
+        echo "WIFI:S:${SSID};T:WPA2;P:${PASSWORD};H:true;;"
+    fi
+    FILE_NAME="QR-Code WiFi AP(${SSID}).png"
+}
+
+write_email () {
+    FILE_NAME="QR-Code Email message.png"
+    email_address
+    read -p "Enter a Subject: " SUBJECT
+    user_message
+    echo "mailto:${EMAIL_ADDR}?subject=${SUBJECT}&body=${USER_MESSAGE}"
+}
+
+write_bitcoin () {
+    FILE_NAME="QR-Code Bitcoin Request.png"
+    read_bitcoin
+    echo "bitcoin:${BTC_ADDRESS}?ammount=${BTC_AMMOUNT}&message=${BTC_MESSAGE}&time=$(date +%s)" 
+}
+
+# Trap signals
+trap "signal_exit TERM" TERM HUP
+trap "signal_exit INT"  INT
+
+# Parse command-line
+while [[ -n $1 ]]; do
+  case $1 in
+      -h | --help)
+          help_message; graceful_exit ;;
+      -O | --options)
+          read -p "Enter qrencode options: " OPT_USER_DEF ;;
+      -v | --vcard)
+          write_vcard >"${TEMP_FILE}" ;;
+      -u | --url)
+          write_url > "${TEMP_FILE}" ;;
+      -s | --sms)
+          write_sms > "${TEMP_FILE}" ;;
+      -p | --phone)
+          write_ph > "${TEMP_FILE}" ;;
+      -w | --wifi)
+          write_wifi > "${TEMP_FILE}" ;;
+      -e | --email)
+          write_email > "${TEMP_FILE}" ;;
+      -b | --bitcoin)
+          write_bitcoin > "${TEMP_FILE}" ;;
+      *)
+          usage
+          error_exit "Unknown option: $1" ;;
+  esac
+  shift
+done
+
+# Main logic
+
+COMMAND_STRING="${QR_ENCODE} ${OPT_USER_DEF:-"${DEF_OPTIONS}"}"
+
+if [[ -n ${OPT_USER_DEF}  ]]
+then
+    cat ${TEMP_FILE} | ${COMMAND_STRING}
+else
+    cat ${TEMP_FILE} | ${COMMAND_STRING} "${FILE_NAME}"
+    if [[ -n "${FILE_NAME}" ]]
+    then
+        echo "QR Code written to: ${FILE_NAME}"
+    fi
+fi
+
+graceful_exit
+
