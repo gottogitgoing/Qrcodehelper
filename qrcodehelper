@@ -18,15 +18,19 @@
 # Usage: qrcodehelper [-h|--help]
 
 # Revision history:
-# 2022-12-18 ver. 0.2 
-#                    Removed unnessesary case statement
-#                    and included provision for the generation
-#                    of qr codes for bitcoin.
-# 2022-12-03 Created by new_script ver. 3.4
+# 2023-01-06 ver. 0.3 Re-ordered options case statement
+#                     - added available options to the
+#                     usage message.
+#                     - Changed the order of statements
+#                     in the options fall through ie. *)
+# 2022-12-18 ver. 0.2 Removed unnessesary case statement
+#                     and included provision for the generation
+#                     of qr codes for bitcoin.
+# 2022-12-03 ver. 0.1 Created by new_script ver. 3.4
 # ---------------------------------------------------------------------------
 
 PROGNAME=${0##*/}
-VERSION="0.2"
+VERSION="0.3"
 DEF_OPTIONS="-s 9 -l H -o"
 TEMP_FILE=$(mktemp)
 QR_ENCODE=$(which qrencode)
@@ -67,7 +71,7 @@ signal_exit() { # Handle trapped signals
 }
 
 usage() {
-  echo -e "Usage: $PROGNAME [-h|--help]"
+  echo -e "Usage: $PROGNAME [-h|--help] [[-O] [-b|-e|-p|-s|-u|-v|-w]]"
 }
 
 # Function to help format the correct space between text in columns.
@@ -241,23 +245,24 @@ while [[ -n $1 ]]; do
           help_message; graceful_exit ;;
       -O | --options)
           read -p "Enter qrencode options: " OPT_USER_DEF ;;
-      -v | --vcard)
-          write_vcard >"${TEMP_FILE}" ;;
-      -u | --url)
-          write_url > "${TEMP_FILE}" ;;
-      -s | --sms)
-          write_sms > "${TEMP_FILE}" ;;
-      -p | --phone)
-          write_ph > "${TEMP_FILE}" ;;
-      -w | --wifi)
-          write_wifi > "${TEMP_FILE}" ;;
-      -e | --email)
-          write_email > "${TEMP_FILE}" ;;
       -b | --bitcoin)
           write_bitcoin > "${TEMP_FILE}" ;;
+      -e | --email)
+          write_email > "${TEMP_FILE}" ;;
+      -p | --phone)
+          write_ph > "${TEMP_FILE}" ;;
+      -s | --sms)
+          write_sms > "${TEMP_FILE}" ;;
+      -u | --url)
+          write_url > "${TEMP_FILE}" ;;
+      -v | --vcard)
+          write_vcard >"${TEMP_FILE}" ;;
+      -w | --wifi)
+          write_wifi > "${TEMP_FILE}" ;;
       *)
+          echo "${PROGNAME}: Unknown option: $1" 2> /dev/null
           usage
-          error_exit "Unknown option: $1" ;;
+          exit 1
   esac
   shift
 done
